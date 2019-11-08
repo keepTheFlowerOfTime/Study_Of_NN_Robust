@@ -1,0 +1,199 @@
+"""
+This file use to test the model which exp need.All the model was trained by CIFAR10 dataset.Notice,all data may or may not
+be done something pretreatment.Besides,we didn't change the structure of model.
+
+CIFAR10 dataset(60000) will spilt to three part.
+Train_Data (45000)
+Validation_Data (5000)
+Test_Data (10000)
+"""
+
+import tensorflow as tf
+
+from nn_robust_attacks.setup_cifar import CifarFix,CIFARModel
+
+from helper.preprocess import stand_out_value,sample
+
+import numpy as np
+from STModel import STModelFactory
+BATCH_SIZE=1
+def test(sess,example):
+    data,model=example
+    x = tf.placeholder(tf.float32, (None, model.image_size, model.image_size, model.num_channels))
+    y=model.predict(x)
+    r = []
+    for i in range(0,len(data.test_data),BATCH_SIZE):
+        pred = sess.run(y, {x: data.test_data[i:i+BATCH_SIZE]})
+        #print(pred)
+        #print('real',data.test_labels[i],'pred',np.argmax(pred))
+        r.append(np.argmax(pred,1) == np.argmax(data.test_labels[i:i+BATCH_SIZE],1))
+    
+    #print(np.mean(r))
+    return np.array(r)
+
+def test_twist(sess,data,model):
+    x = tf.placeholder(tf.float32, (None, model.image_size, model.image_size, model.num_channels))
+    y=model.predict(x)
+    r = []
+    for i in range(0,len(data),BATCH_SIZE):
+        pred = sess.run(y, {x: data[i:i+BATCH_SIZE]})
+        #print(pred)
+        #print('real',data.test_labels[i],'pred',np.argmax(pred))
+        r.append(pred)
+    
+    #print(np.mean(r))
+    return np.concatenate(r,0)
+
+#0.781
+def normal_model_test():
+    """
+    this test didn't do anything on CIFAR10 data set.We will see the result as base value.
+    """
+    model_path='models/cifar'
+    data=CifarFix(test_mode='n',need_train_data=False)
+    
+
+    precise_ratio=None
+
+    with tf.Session() as sess:
+        model=CIFARModel(model_path,sess)
+        precise_ratio=test(sess,(data,model))
+
+    return precise_ratio
+
+#0.472
+def shuffle_model_test():
+    """
+    operation shuffle only change the pos of pixel,not the value itself.
+
+    all data will follow the same shuffle rule.It's means if we do shuffle operation
+    for two same image,the result still same. 
+
+    Test will return the precise ratio in Test_Data.
+    """
+    seed=5387319283
+    model_path='models/cifar_shuffle_{}'.format(seed)
+    data=CifarFix(train_mode='o',test_mode='sn',need_train_data=False,seed=seed)
+    
+
+    precise_ratio=None
+
+    with tf.Session() as sess:
+        model=CIFARModel(model_path,sess)
+        precise_ratio=test(sess,(data,model))
+
+    return precise_ratio
+
+
+# mode 'b' 0.663
+# mode 'n' 0.654
+# mode 'b-fix' 0.661
+def draft_model_test():
+    """
+    The main idea of this test is hold the most important info in image.That's means we will do something transform on origin image.
+    We call the new image "draft".
+    The generation of "draft" is according to the origin image's color gradient.We will erase some pixel where
+    these color gradient too small. 
+    """
+    model_path='models/draft_b_fix'
+    data=CifarFix(need_train_data=False,test_mode='d',args={'d':[.6,'b']})
+    
+
+    precise_ratio=None
+    with tf.Session() as sess:
+        model=CIFARModel(model_path,sess)
+        precise_ratio=test(sess,(data,model))
+
+    return precise_ratio
+
+#0.7482
+def stand_out_test():
+    model_path='models/cifar_stand_out'
+    data=CifarFix(need_train_data=False)
+
+    data.test_data=stand_out_value(data.test_data)
+    with tf.Session() as sess:
+        model=CIFARModel(model_path,sess)
+        precise_ratio=test(sess,(data,model))
+
+    return precise_ratio
+
+
+def new_model_test():
+    model_path='models/cifar_stand_out'
+    data=CifarFix(need_train_data=False)   
+    factory=STModelFactory()
+    with tf.Session() as sess:
+        model=factory.get_predict_model(model_path)
+        precise_ratio=test(sess,(data,model))
+    
+    return precise_ratio
+
+def craft_model_test():
+    model_path='models/cifar_craft'
+    data=CifarFix(need_train_data=False)   
+    factory=STModelFactory()
+    with tf.Session() as sess:
+        model=factory.get_craft_model(model_path,False)
+        precise_ratio=test(sess,(data,model))
+    return precise_ratio
+def check_presoftmax():
+    model_path='models/cifar_stand_out'
+    data=CifarFix(need_train_data=False)
+    factory=STModelFactory()
+    a1=None
+    a2=None
+    
+    with tf.Session() as sess:
+        #model=factory.get_predict_model(model_path)
+        model=CIFARModel('models/cifar')
+        x = tf.placeholder(tf.float32, (None, model.image_size, model.image_size, model.num_channels))
+        y=model.predict(x)
+        #origin_model=CIFARModel('models/cifar')
+        a1=sess.run(y,{x:data.test_data[0:1]})
+        #a2=origin_model.predict(data.test_data[0:1])
+
+    return a1,None#,a2
+
+
+def twist_test():
+    def add_twist(target,number):
+        l=0.01
+        batch,w,h,c=target.shape
+        twist=np.random.rand(1,w,h,c)
+        twist=sample(twist,0.2)
+        twist*=l
+        #twist-=l
+        result=[]
+        result.append(twist)
+        for i in range(batch):
+            for j in range(number):
+                result.append((j+1)*twist+target[i:i+1])
+        
+        return np.concatenate(result,0)
+    model_path='models/cifar'
+    data=CifarFix(test_mode='n',need_verify_data=False)
+    start=np.random.randint(0,100)
+    number=1
+    test_data=add_twist(data.train_data[start:start+number],15)
+
+    result=None
+
+    with tf.Session() as sess:
+        model=CIFARModel(model_path,sess)
+        model.model.pop()
+        model.model.pop()
+        result=test_twist(sess,test_data,model)
+
+    result*=result[0]
+
+    return np.mean(np.where(result>=0,1,0),axis=1)
+
+
+#print(np.mean(normal_model_test()))
+#print(np.mean(shuffle_model_test()))
+#print(np.mean(draft_model_test()))
+#print(np.mean(stand_out_test()))
+#print(np.mean(craft_model_test()))
+print(twist_test())
+#print(a2)
