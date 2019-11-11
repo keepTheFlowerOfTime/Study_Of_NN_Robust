@@ -78,7 +78,7 @@ def stand_out_value(data):
 
     fake_gradient=fake_gradient.transpose([0,2,3,1])
 
-    return logistic(fake_gradient,-1,1,-5,5)
+    return np.abs(fake_gradient)
 
 def sample(data,ratio):
     shape=data.shape

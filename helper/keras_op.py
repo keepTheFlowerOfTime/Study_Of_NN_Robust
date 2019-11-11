@@ -45,7 +45,7 @@ def stand_out_value(data):
         
         temp=[t[i]/d[i] for i in range(b)]
         result=tf.concat(temp,0)
-    return logistic(result,-1,1,-5,5)
+    return K.abs(result)
 
 def step_by_step(data,lower_bound,upper_bound,channel):
     """
