@@ -1,6 +1,8 @@
 import keras.backend as K
 import numpy as np
 import tensorflow as tf
+import keras.layers as op
+
 
 from helper.preprocess import get_weight
 t=-1/9
@@ -36,15 +38,9 @@ def stand_out_value(data):
     b,w,h,c=result.shape
     largest_change=result
     largest_change=tf.reduce_max(result,[1,2])
-    o=b.__int__()
-    if o is None:
-        result/=largest_change
-    else:
-        t=tf.split(result,b)
-        d=tf.split(result,b)
-        
-        temp=[t[i]/d[i] for i in range(b)]
-        result=tf.concat(temp,0)
+    #result=K.batch_dot(result,1/largest_change,(0,0))
+    result=op.multiply([result,1/largest_change])
+    #K.batch_set_value
     return K.abs(result)
 
 def step_by_step(data,lower_bound,upper_bound,channel):

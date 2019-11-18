@@ -149,3 +149,11 @@ class CifarFix:
 
         if need_verify_data:       
             self.test_data, self.test_labels = load_batch("../cifar-10-batches-bin/test_batch.bin",test_mode,self.args)
+
+    def preprocess(self,handle):
+        if self.__dict__.get('train_data') is not None:
+            self.train_data=handle(self.train_data)
+        if self.__dict__.get('test_data') is not None:
+            self.test_data=handle(self.test_data)
+        if self.__dict__.get('validation_data') is not None:
+            self.validation_data=handle(self.validation_data)

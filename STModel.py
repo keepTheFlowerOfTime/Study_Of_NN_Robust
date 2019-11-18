@@ -40,18 +40,18 @@ class STModelFactory:
         
         m=self.add_robust_layer(m)
 
-        return STModel(m)
+        return ModelAdapter(m)
 
     def get_train_model(self):
         m=STModelFactory.default_train_cnn()
-        return STModel(m)
+        return ModelAdapter(m)
 
     def get_craft_model(self,restore=None,is_train=False):
         m=STModelFactory.hand_craft_model(is_train)
         if not is_train and restore is not None:
             m.load_weights(restore)
         
-        return STModel(m)
+        return ModelAdapter(m)
 
     def get_combine_model(self,restore=None,is_train=False):
         origin=STModelFactory.fix_cnn_model(True)
@@ -87,7 +87,7 @@ class STModelFactory:
         model=STModelFactory.compare_cnn_model(is_train)
         if restore is not None:
             model.load_weights(restore)
-        return STModel(model,sess)
+        return ModelAdapter(model,sess)
 
     @staticmethod
     def compare_cnn_model(is_train=False):
@@ -195,7 +195,7 @@ class KModel:
     def predict(self, data):
         return self.model([data,stand_out_value(data)])
 
-class STModel:
+class ModelAdapter:
     def __init__(self,model,sess=None):
         self.num_channels = 3
         self.image_size = 32

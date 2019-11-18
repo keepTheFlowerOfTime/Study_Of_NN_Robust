@@ -5,6 +5,7 @@ class FeatureExtractLayer(Layer):
     def __init__(self,**kwargs):
         if 'input_shape' not in kwargs and 'input_dim' in kwargs:
             kwargs['input_shape'] = (kwargs.pop('input_dim'),)
+        kwargs['trainable']=False
         super(FeatureExtractLayer,self).__init__(**kwargs)
 
 
