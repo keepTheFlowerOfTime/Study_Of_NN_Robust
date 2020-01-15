@@ -67,7 +67,7 @@ def test_resnet(data,path):
     ds=[]
     model=ResNet()
     with tf.compat.v1.Session() as sess:
-        model=ModelAdapter(model.get_knowledge_model(path))
+        model=ModelAdapter(model.get_model(path,0,False))
         attack = CarliniL2(sess, model, batch_size=9, max_iterations=1000, confidence=0,boxmin=0,boxmax=255)
         inputs, targets = generate_data(data, samples=1, targeted=True,
                                     start=4, inception=False)
@@ -88,9 +88,9 @@ def test_resnet(data,path):
     return ps,ds
 data=CifarFix(train_mode='o',test_mode='o')
 #p,d=test_default(data)
-p,d=test_resnet(data,'../models/cifar_resnet_knowledge')
+p,d=test_resnet(data,'../models/cifar_resnet_with_drop_feature')
 for i in range(len(p)):
-    print(p[i],d[i])
+    print(p[i],d[i]/256)
 #test_exp(data,'models/cifar_stand_out')
 
 # normal test result

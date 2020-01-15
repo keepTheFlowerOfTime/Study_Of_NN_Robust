@@ -7,7 +7,7 @@ from keras.layers import Conv2D,Flatten,Dense,Activation,MaxPooling2D,ReLU,Input
 import keras.backend as k
 from data_set import CifarFix
 
-from layers import FeatureExtractLayer,FocusLayer
+from layers import FeatureExtractLayer,FocusLayer,DropFeature
 
 import numpy as np
 class STModelFactory:
@@ -83,14 +83,14 @@ class STModelFactory:
     def trainable_layer(self):
         return STModelFactory.default_predict_cnn()
 
-    def compare_model(self,is_train=False,restore=None,sess=None):
-        model=STModelFactory.compare_cnn_model(is_train)
+    def compare_model(self,is_train=False,restore=None,sess=None,drop_feature=0):
+        model=STModelFactory.compare_cnn_model(is_train,drop_feature)
         if restore is not None:
             model.load_weights(restore)
         return ModelAdapter(model,sess)
 
     @staticmethod
-    def compare_cnn_model(is_train=False):
+    def compare_cnn_model(is_train=False,drop_feature=0):
         model=Sequential()
         model.add(InputLayer(input_shape=(32,32,3)))
         model.add(Conv2D(64, (3, 3),padding='same'))
@@ -106,6 +106,8 @@ class STModelFactory:
         model.add(MaxPooling2D(pool_size=(2, 2)))
         
         model.add(Flatten())
+        if drop_feature>0:
+            model.add(DropFeature(drop_feature))
         model.add(Dense(256))
         model.add(Activation('relu'))
         if is_train:

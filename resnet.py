@@ -12,8 +12,7 @@ from keras.models import Model
 #from keras.datasets import cifar10
 from data_set import CifarFix
 #from helper.keras_op import stand_out_value
-from layers import FeatureExtractLayer
-
+from layers import FeatureExtractLayer,ToOneLayer,DropFeature
 import numpy as np
 import os
 import knowledge_model as km
@@ -48,7 +47,6 @@ n = 3
 version = 1
 
 class ResNet:
-    n=3
     depth=n*6+2 if version==1 else n*9+2
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -63,17 +61,18 @@ class ResNet:
             data-=data_mean
         return data
 
-    def get_model(self,restore=None):
+    def get_model(self,restore=None,drop_feature=0,need_softmax=True):
         input_shape=[32,32,3]
 
         if version == 2:
             model = ResNet.resnet_v2(input_shape=input_shape)
         else:
-            model = ResNet.resnet_v1(input_shape=input_shape)
+            model = ResNet.resnet_v1(input_shape=input_shape,drop_feature=drop_feature,need_softmax=need_softmax)
         if restore is not None:
             model.load_weights(restore)
 
         return model
+
 
     def get_knowledge_model(self,restore=None):
         input_shape=[32,32,3]
@@ -100,9 +99,75 @@ class ResNet:
 
         return model
 
+    def get_random_model(self,num_classes=10,drop_feature=0):
+        input_shape=[32,32,3]
+        rs_input_shape=[32,32,16]
+        round_number=max(round_number,1)
+        inputs = Input(shape=input_shape)
+        rs_inputs=Input(shape=rs_input_shape)
+        rs_add=Input(shape=rs_input_shape)
+        x = ResNet.resnet_layer(inputs=inputs)
+        rs=ResNet.round_struct((32,32,16),0.3)
 
+        r=rs.output
+
+        y = Flatten()(r)
+        outputs = Dense(num_classes,
+                        #activation='softmax',
+                        kernel_initializer='he_normal')(y)
+
+        return Model(inputs=[inputs,rs_inputs,rs_add],outputs=[r,outputs]),rs
     @staticmethod
-    def resnet_v1(input_shape, num_classes=10):
+    def round_struct(inputs,add,drop_feature=0):
+        depth=ResNet.depth
+        if ( depth - 2) % 6 != 0:
+            raise ValueError('depth should be 6n+2 (eg 20, 32, 44 in [a])')
+        
+        num_res_blocks = int((depth - 2) / 6)
+        conv = Conv2D(16,
+                    kernel_size=1,
+                    strides=1,
+                    padding='same',
+                    kernel_initializer='he_normal',
+                    kernel_regularizer=l2(1e-4),name='conv_round')
+        res_x=keras.layers.add([inputs,conv(add)])
+        # Start model definition.
+        num_filters = 16
+        # Instantiate the stack of residual units
+        for stack in range(3):
+            for res_block in range(num_res_blocks):
+                strides = 1
+                if stack > 0 and res_block == 0:  # first layer but not first stack
+                    strides = 2  # downsample
+                y = ResNet.resnet_layer(inputs=res_x,
+                                num_filters=num_filters,
+                                strides=strides)
+                y = ResNet.resnet_layer(inputs=y,
+                                num_filters=num_filters,
+                                activation=None)
+                if stack > 0 and res_block == 0:  # first layer but not first stack
+                    # linear projection residual shortcut connection to match
+                    # changed dims
+                    res_x = ResNet.resnet_layer(inputs=res_x,
+                                    num_filters=num_filters,
+                                    kernel_size=1,
+                                    strides=strides,
+                                    activation=None,
+                                    batch_normalization=False)
+                res_x = keras.layers.add([res_x, y])
+                res_x = Activation('relu')(res_x)
+            num_filters *= 2
+
+        
+        # Add classifier on top.
+        # v1 does not use BN after last shortcut connection-ReLU
+        res_x = AveragePooling2D(pool_size=8)(res_x)
+        if drop_feature>0:
+            res_x=DropFeature(drop_feature)(res_x)
+
+        return Model(inputs=[inputs,add],outputs=res_x)
+    @staticmethod
+    def resnet_v1(input_shape, num_classes=10,drop_feature=0,need_softmax=False):
         """ResNet Version 1 Model builder [a]
 
         Stacks of 2 x (3 x 3) Conv2D-BN-ReLU
@@ -133,19 +198,22 @@ class ResNet:
         depth=ResNet.depth
         if (depth - 2) % 6 != 0:
             raise ValueError('depth should be 6n+2 (eg 20, 32, 44 in [a])')
-        # Start model definition.
-        num_filters = 16
+        
         num_res_blocks = int((depth - 2) / 6)
 
         inputs = Input(shape=input_shape)
         x = ResNet.resnet_layer(inputs=inputs)
+
+        res_x=x
+        # Start model definition.
+        num_filters = 16
         # Instantiate the stack of residual units
         for stack in range(3):
             for res_block in range(num_res_blocks):
                 strides = 1
                 if stack > 0 and res_block == 0:  # first layer but not first stack
                     strides = 2  # downsample
-                y = ResNet.resnet_layer(inputs=x,
+                y = ResNet.resnet_layer(inputs=res_x,
                                 num_filters=num_filters,
                                 strides=strides)
                 y = ResNet.resnet_layer(inputs=y,
@@ -154,30 +222,40 @@ class ResNet:
                 if stack > 0 and res_block == 0:  # first layer but not first stack
                     # linear projection residual shortcut connection to match
                     # changed dims
-                    x = ResNet.resnet_layer(inputs=x,
+                    res_x = ResNet.resnet_layer(inputs=res_x,
                                     num_filters=num_filters,
                                     kernel_size=1,
                                     strides=strides,
                                     activation=None,
                                     batch_normalization=False)
-                x = keras.layers.add([x, y])
-                x = Activation('relu')(x)
+                res_x = keras.layers.add([res_x, y])
+                res_x = Activation('relu')(res_x)
             num_filters *= 2
+
+        
+        if drop_feature>0:
+            res_x=DropFeature(drop_feature)(res_x)
 
         # Add classifier on top.
         # v1 does not use BN after last shortcut connection-ReLU
-        x = AveragePooling2D(pool_size=8)(x)
-        y = Flatten()(x)
-        outputs = Dense(num_classes,
-                        #activation='softmax',
-                        kernel_initializer='he_normal')(y)
+        res_x = AveragePooling2D(pool_size=8)(res_x)
+        
 
+        y = Flatten()(res_x)
+        if need_softmax:
+            outputs = Dense(num_classes,
+                            activation='softmax',
+                            kernel_initializer='he_normal')(y)
+        else:
+            outputs=Dense(num_classes,
+                            #activation='softmax',
+                            kernel_initializer='he_normal')(y)
         # Instantiate model.
         model = Model(inputs=inputs, outputs=outputs)
         return model
 
     @staticmethod
-    def resnet_v1_feature_extract(inputs, num_classes=10):
+    def resnet_v1_feature_extract(inputs, num_classes=10,need_flatter=True):
         """ResNet Version 1 Model builder [a]
 
         Stacks of 2 x (3 x 3) Conv2D-BN-ReLU
@@ -239,10 +317,11 @@ class ResNet:
             num_filters *= 2
 
         x = AveragePooling2D(pool_size=8)(x)
-        y = Flatten()(x)
+        if need_flatter:
+            x = Flatten()(x)
        
         # Instantiate model.
-        return y
+        return x
 
     @staticmethod
     def resnet_v2(input_shape, num_classes=10):
@@ -411,32 +490,35 @@ class ResNet:
         print('Learning rate: ', lr)
         return lr
 
+
 class KModel_ResNet:
     def __init__(self):
         pass
 
-    def get_model(self,restore=None,is_train=False):
+    def get_model(self,restore=None,status=km.KnowledgeModel.Status_Feature_Train):
         input_shape=[32,32,3]
         fe_handle=ResNet.resnet_v1_feature_extract
-        res_fe=km.k_module(lambda a,b:fe_handle(FeatureExtractLayer()(a)))
-        normal=km.k_module(lambda a,b:fe_handle(a))
-        mix=km.k_module(lambda a,b:self.mix_func(a))
+        res_fe=km.k_module(lambda a,b:fe_handle(FeatureExtractLayer()(a),need_flatter=True))
+        normal=km.k_module(lambda a,b:fe_handle(a,need_flatter=True))
+        mix=km.k_module(lambda a,b:self.mix_func(a,b))
         decision=km.k_module(self.decision)
         model=km.KnowledgeModel(input_shape,[normal,res_fe],mix,decision)
-        return model.build(restore,is_train)
+        return model.build(restore,status)
         
     
     #n-level
-    def mix_func(self,inputs):
+    def mix_func(self,inputs,status):
         def power2(value):
-            return Multiply()(value,value)
-        n=2
+            return Multiply()([value,value])
+        n=1
+        #r=ToOneLayer([1,2])(inputs)
         r=Multiply()(inputs)
         for i in range(1,n):
             r=power2(r)
-        return r
         
-    def decision(self,inputs,is_train):
+        return r
+
+    def decision(self,inputs,status):
         x=Dense(256)(inputs)
         x=ReLU()(x)
         x=Dense(256)(x)

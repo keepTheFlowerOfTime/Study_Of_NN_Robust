@@ -33,15 +33,15 @@ def logistic(a,lower_a=None,upper_a=None,lower_expect=None,upper_expect=None):
 
     return 1/(1+tf.exp(-scale_a))
 
+def to_one(data,axis):
+    max_value=tf.reduce_max(data,axis)
+    result=op.multiply([data,1/max_value])
+    return result
+
 def stand_out_value(data):
     result=tf.nn.conv2d(data,StandOutWeight,strides=[1,1,1,1],padding='SAME')
-    b,w,h,c=result.shape
-    largest_change=result
-    largest_change=tf.reduce_max(result,[1,2])
-    #result=K.batch_dot(result,1/largest_change,(0,0))
-    result=op.multiply([result,1/largest_change])
     #K.batch_set_value
-    return K.abs(result)
+    return K.abs(to_one(result,[1,2]))
 
 def step_by_step(data,lower_bound,upper_bound,channel):
     """
@@ -67,3 +67,12 @@ def standardization(data):
     std=tf.sqrt(v)
 
     return (data-u)/std
+
+
+# def drop(data,shape,prob,default_value=0):
+#     """
+#     given a certain prob to drop the feature.Proposed to test the coherence of feature.
+#     """
+#     sample=K.random_uniform_variable(data.get_shape(),0,1)
+#     #sample=tf.compat.v1.random_uniform(data.get_shape(),minval=0,maxval=1,dtype=tf.float32)
+#     return tf.where(sample>prob,data,default_value)

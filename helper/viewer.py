@@ -25,3 +25,12 @@ def image_view(*kargs):
                 index+=1
     plt.axis('off')
     plt.show()
+
+def rect_show(labels,numbers):
+    def autolabel(rects):
+        for rect in rects:
+            height = rect.get_height()
+            plt.text(rect.get_x()+rect.get_width()/2.- 0.2, 1.03*height, '%s' % int(height))
+
+    autolabel(plt.bar(range(len(labels)), numbers, color='rgb', tick_label=labels))
+    plt.show()

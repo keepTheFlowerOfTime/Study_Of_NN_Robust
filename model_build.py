@@ -2,6 +2,7 @@ import tensorflow as tf
 from keras.optimizers import SGD,Adam
 from data_set import CifarFix
 from helper.preprocess import stand_out_value
+from helper.copy import copy_from
 from keras.callbacks import ModelCheckpoint, LearningRateScheduler
 from keras.callbacks import ReduceLROnPlateau
 from keras.preprocessing.image import ImageDataGenerator
@@ -91,14 +92,14 @@ def train_compare(is_test=True):
     data=CifarFix(need_verify_data=False)
     train_ST(data,factory.compare_model(is_train=True),'../models/cifar_combine_compare')
 
-def train_resnet(path,model,data_augmentation=True):
+def train_resnet(path,data,model,data_augmentation=True):
     # Training parameters
     batch_size = 128  # orig paper trained all networks with batch_size=128
     epochs = 200
     #data_augmentation = True
     num_classes = 10
     #path='../models/cifar_resnet_knowledge'
-    data=CifarFix(train_mode='o',need_verify_data=False)
+    #data=CifarFix(train_mode='o',need_verify_data=False)
     #model=ResNet().get_knowledge_model()
     model.compile(loss='categorical_crossentropy',
               optimizer=Adam(learning_rate=ResNet.lr_schedule(0)),
@@ -184,4 +185,10 @@ def train_resnet(path,model,data_augmentation=True):
                             epochs=epochs, verbose=1, workers=4,
                             callbacks=callbacks)
 
-train_resnet('../models/cifar_knet',KModel_ResNet().get_model(is_train=True))
+data=CifarFix('o',need_verify_data=False)
+#ResNet().preprocess(data)
+base_model=ResNet().get_model(None,0.5,True)
+#k_model=KModel_ResNet().get_model(status=1)
+#copy_from(k_model,base_model,fixed=True)
+train_resnet('../models/cifar_resnet_with_drop_feature',data,base_model)
+
