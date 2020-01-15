@@ -1,3 +1,6 @@
 [submodule "nn_robust_attacks"]
 	path = nn_robust_attacks
 	url = https://github.com/keepTheFlowerOfTime/nn_robust_attacks.git
+[submodule "obfuscated-gradients"]
+	path = obfuscated-gradients
+	url = https://github.com/anishathalye/obfuscated-gradients.git
